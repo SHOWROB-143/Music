@@ -1,70 +1,55 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const Server = require('../../models/Server');
-const shiva = require('../../shiva');
+const { SlashCommandBuilder } = require('discord.js');
+const { autoplayCollection } = require('../../mongodb.js');
+const { sendSuccessResponse, handleCommandError } = require('../../utils/responseHandler.js');
+const { getLang } = require('../../utils/languageLoader');
 
-const COMMAND_SECURITY_TOKEN = shiva.SECURITY_TOKEN;
+const data = new SlashCommandBuilder()
+  .setName("autoplay")
+  .setDescription("Toggle autoplay for the server")
+  .addBooleanOption(option =>
+    option.setName("enable")
+      .setDescription("Toggle autoplay on / off")
+      .setRequired(true)
+  );
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('autoplay')
-        .setDescription('Toggle autoplay mode')
-        .addBooleanOption(option =>
-            option.setName('enabled')
-                .setDescription('Enable or disable autoplay')
-                .setRequired(true)
-        ),
-    securityToken: COMMAND_SECURITY_TOKEN,
-
-    async execute(interaction, client) {
-        if (!shiva || !shiva.validateCore || !shiva.validateCore()) {
-            const embed = new EmbedBuilder()
-                .setDescription('❌ System core offline - Command unavailable')
-                .setColor('#FF0000');
-            return interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
-        }
-
-        interaction.shivaValidated = true;
-        interaction.securityToken = COMMAND_SECURITY_TOKEN;
-
-        await interaction.deferReply();
-
-        const ConditionChecker = require('../../utils/checks');
-        const checker = new ConditionChecker(client);
-        
+    data: data,
+    run: async (client, interaction) => {
         try {
-            const conditions = await checker.checkMusicConditions(
-                interaction.guild.id, 
-                interaction.user.id, 
-                interaction.member.voice?.channelId
+            await interaction.deferReply();
+
+            const lang = await getLang(interaction.guildId);
+            const t = lang.music.autoplay;
+
+            const enable = interaction.options.getBoolean('enable');
+            const guildId = interaction.guild.id;
+
+            await autoplayCollection.updateOne(
+                { guildId },
+                { $set: { autoplay: enable } },
+                { upsert: true }
             );
 
-            const canUse = await checker.canUseMusic(interaction.guild.id, interaction.user.id);
-            if (!canUse) {
-                const embed = new EmbedBuilder().setDescription('❌ You need DJ permissions to change autoplay settings!');
-                return interaction.editReply({ embeds: [embed] })
-                    .then(() => setTimeout(() => interaction.deleteReply().catch(() => {}), 3000));
-            }
+            const content = enable 
+                ? t.enabled.title + '\n\n' + t.enabled.message + '\n\n' + t.enabled.note
+                : t.disabled.title + '\n\n' + t.disabled.message + '\n\n' + t.disabled.note;
 
-            const enabled = interaction.options.getBoolean('enabled');
-
-            await Server.findByIdAndUpdate(interaction.guild.id, {
-                'settings.autoplay': enabled
-            }, { upsert: true });
-
-            if (conditions.hasActivePlayer) {
-                const player = conditions.player;
-                player.setAutoplay = enabled;
-            }
-
-            const embed = new EmbedBuilder().setDescription(`🎲 Autoplay **${enabled ? 'enabled' : 'disabled'}**`);
-            return interaction.editReply({ embeds: [embed] })
-                .then(() => setTimeout(() => interaction.deleteReply().catch(() => {}), 3000));
+            return await sendSuccessResponse(
+                interaction,
+                content,
+                enable ? '#00ff00' : '#ff0000'
+            );
 
         } catch (error) {
-            console.error('Autoplay command error:', error);
-            const embed = new EmbedBuilder().setDescription('❌ An error occurred while toggling autoplay!');
-            return interaction.editReply({ embeds: [embed] })
-                .then(() => setTimeout(() => interaction.deleteReply().catch(() => {}), 3000));
+            const lang = await getLang(interaction.guildId).catch(() => ({ music: { autoplay: { errors: {} } } }));
+            const t = lang.music?.autoplay?.errors || {};
+            
+            return await handleCommandError(
+                interaction,
+                error,
+                'autoplay',
+                (t.title || '## ❌ Error') + '\n\n' + (t.message || 'An error occurred while updating autoplay settings.\nPlease try again later.')
+            );
         }
     }
 };
