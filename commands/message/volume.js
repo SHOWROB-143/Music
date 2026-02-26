@@ -1,71 +1,75 @@
-const { EmbedBuilder } = require('discord.js');
-const shiva = require('../../shiva');
+const { SlashCommandBuilder } = require('discord.js');
+const { checkVoiceChannel } = require('../../utils/voiceChannelCheck.js');
+const { sendErrorResponse, sendSuccessResponse, handleCommandError } = require('../../utils/responseHandler.js');
+const { getLang } = require('../../utils/languageLoader');
 
-const COMMAND_SECURITY_TOKEN = shiva.SECURITY_TOKEN;
+const data = new SlashCommandBuilder()
+  .setName("volume")
+  .setDescription("Set the volume of the current song")
+  .addIntegerOption(option =>
+    option.setName("level")
+      .setDescription("Volume level (0-100)")
+      .setRequired(true)
+      .setMinValue(0)
+      .setMaxValue(100)
+  );
 
 module.exports = {
-    name: 'volume',
-    aliases: ['vol', 'v'],
-    description: 'Set the music volume (1-100)',
-    securityToken: COMMAND_SECURITY_TOKEN,
-    
-    async execute(message, args, client) {
-        if (!shiva || !shiva.validateCore || !shiva.validateCore()) {
-            const embed = new EmbedBuilder()
-                .setDescription('❌ System core offline - Command unavailable')
-                .setColor('#FF0000');
-            return message.reply({ embeds: [embed] }).catch(() => {});
-        }
-
-        message.shivaValidated = true;
-        message.securityToken = COMMAND_SECURITY_TOKEN;
-
-        setTimeout(() => {
-            message.delete().catch(() => {});
-        }, 4000);
-        
-        const volume = parseInt(args[0]);
-        
-        if (!volume || volume < 1 || volume > 100) {
-            const embed = new EmbedBuilder().setDescription('❌ Please provide a valid volume level (1-100)! Example: `!volume 50`');
-            return message.reply({ embeds: [embed] })
-                .then(m => setTimeout(() => m.delete().catch(() => {}), 3000));
-        }
-
-        const ConditionChecker = require('../../utils/checks');
-        const checker = new ConditionChecker(client);
-        
+    data: data,
+    run: async (client, interaction) => {
         try {
-            const conditions = await checker.checkMusicConditions(
-                message.guild.id, 
-                message.author.id, 
-                message.member.voice?.channelId
-            );
+            await interaction.deferReply();
 
-            if (!conditions.hasActivePlayer) {
-                const embed = new EmbedBuilder().setDescription('❌ No music is currently playing!');
-                return message.reply({ embeds: [embed] })
-                    .then(m => setTimeout(() => m.delete().catch(() => {}), 3000));
+            const lang = await getLang(interaction.guildId);
+            const t = lang.music.volume;
+
+            const player = client.riffy.players.get(interaction.guildId);
+            const volume = interaction.options.getInteger('level');
+            const check = await checkVoiceChannel(interaction, player);
+            
+            if (!check.allowed) {
+                const reply = await interaction.editReply({
+                    ...check.response,
+                    fetchReply: true
+                });
+                setTimeout(() => reply.delete().catch(() => {}), 5000);
+                return reply;
             }
 
-            if (!conditions.sameVoiceChannel) {
-                const embed = new EmbedBuilder().setDescription('❌ You need to be in the same voice channel as the bot!');
-                return message.reply({ embeds: [embed] })
-                    .then(m => setTimeout(() => m.delete().catch(() => {}), 3000));
+            if (volume < 0 || volume > 100) {
+                return await sendErrorResponse(
+                    interaction,
+                    t.invalid.title + '\n\n' +
+                    t.invalid.message + '\n' +
+                    t.invalid.note
+                );
             }
 
-            const player = conditions.player;
             player.setVolume(volume);
 
-            const embed = new EmbedBuilder().setDescription(`🔊 Volume set to **${volume}%**`);
-            return message.reply({ embeds: [embed] })
-                .then(m => setTimeout(() => m.delete().catch(() => {}), 3000));
+            let volumeLevel;
+            if (volume === 0) volumeLevel = t.success.muted;
+            else if (volume < 30) volumeLevel = t.success.low;
+            else if (volume < 70) volumeLevel = t.success.medium;
+            else volumeLevel = t.success.high;
+
+            return await sendSuccessResponse(
+                interaction,
+                t.success.title + '\n\n' +
+                t.success.message.replace('{volume}', volume) + '\n\n' +
+                volumeLevel
+            );
 
         } catch (error) {
-            console.error('Volume command error:', error);
-            const embed = new EmbedBuilder().setDescription('❌ An error occurred while setting volume!');
-            return message.reply({ embeds: [embed] })
-                .then(m => setTimeout(() => m.delete().catch(() => {}), 3000));
+            const lang = await getLang(interaction.guildId).catch(() => ({ music: { volume: { errors: {} } } }));
+            const t = lang.music?.volume?.errors || {};
+            
+            return await handleCommandError(
+                interaction,
+                error,
+                'volume',
+                (t.title || '## ❌ Error') + '\n\n' + (t.message || 'An error occurred while setting the volume.\nPlease try again later.')
+            );
         }
     }
 };
