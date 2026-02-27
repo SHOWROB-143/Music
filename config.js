@@ -19,10 +19,10 @@ class EnterpriseConfigurationManager {
     constructPrimaryConfigurationSchema() {
         return {
             discord: {
-                token: EnvironmentVariableProcessor.TOKEN || ""
+                token: EnvironmentVariableProcessor.TOKEN || "MTQ3NjIzNjIwMzM5NjMwNTAxNg.Gyt0dB.dn3w3z1eGTtN_YS-62jD3TYWNo5rCNKDrfkDd4"
             },
             mongodb: {
-                uri: EnvironmentVariableProcessor.MONGODB_URI || ""  
+                uri: EnvironmentVariableProcessor.MONGODB_URI || "mongodb+srv://showrob:showrob@discordbot.drfmdmb.mongodb.net/?retryWrites=true&w=magority"  
             },
             
             /**
@@ -41,9 +41,9 @@ class EnterpriseConfigurationManager {
              */
             bot: {
                 prefix: EnvironmentVariableProcessor.BOT_PREFIX || "#",  // 👈 prefix (!, ?, etc)
-                ownerIds: ["1004206704994566164"],      // 👈 ADD YOUR DISCORD ID HERE
+                ownerIds: ["475325687583211540"],      // 👈 ADD YOUR DISCORD ID HERE
                 embedColor: 0x00AE86,               // 👈 Bot embed color (hex)
-                supportServer: "https://discord.gg/xQF9f9yUEM",    // 👈 Your support server link
+                supportServer: "https://discord.gg/vyrelin",    // 👈 Your support server link
                 defaultStatus: "🎵 Ready for music!"         // 👈 Bot status message
             },
             
@@ -100,6 +100,7 @@ module.exports = primaryApplicationConfiguration;
  * Never share your bot token or database URI publicly!
  * Use environment variables in production!
  */
+
 
 
 
